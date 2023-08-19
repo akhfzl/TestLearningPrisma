@@ -1,6 +1,7 @@
 const prisma = require('../../db/prisma');
-const fs = require('fs');
 const finished = require("stream-promise");
+const { UploadToDropBox } = require('./users.utilities');
+require('dotenv').config()
 
 const Users = async(parent, args, ctx) => {
     const data = await prisma.user.findMany();
@@ -45,6 +46,8 @@ const singleUpload = async(parent, { file }, args) => {
     const out = require("fs").createWriteStream(`./public/${filename}`);
     stream.pipe(out);
     await finished(out);
+
+    await UploadToDropBox(process.env.TOKEN, filename);
 
     return { filename, mimetype, encoding };
 }
