@@ -1,30 +1,64 @@
 const { graphqlUploadExpress } = require('graphql-upload-minimal');
-const { ApolloServerPluginLandingPageLocalDefault } = require('apollo-server-core');
-const { ApolloServer } = require('apollo-server-express');
+const { expressMiddleware } =  require('@apollo/server/express4');
+const { ApolloServerPluginDrainHttpServer } = require('@apollo/server/plugin/drainHttpServer')
+const { ApolloServer } = require('@apollo/server');
 const { applyMiddleware } = require('graphql-middleware');
-const graphql = require('./graphql');
+const { makeExecutableSchema } = require('graphql-tools');
+const { ApolloServerErrorCode } = require('@apollo/server/errors');
+const { typedefs, resolvers, auth } = require('./graphql');
 const express = require('express');
+const bodyParser = require('body-parser')
+const http = require('http');
+require('dotenv').config()
 
 const startServer = async() => {
-    const server = new ApolloServer({ 
-        typeDefs: graphql.typedefs, 
-        resolvers: graphql.resolvers,
-        plugins: [ApolloServerPluginLandingPageLocalDefault({ embed:true })],
-        // csrfPrevention: true,
-        // cache: 'bounded',
-    })
-
-    await server.start()
-    
     const app = express();
     app.use(graphqlUploadExpress());
     app.use(express.static('public'));
 
-    server.applyMiddleware({ app })
-    
-    app.listen(8000, () => {
-        console.log(`🚀 Server running at http://localhost:8000${server.graphqlPath}`)
+    const httpServer = http.createServer(app);
+
+    const makeExecutable = makeExecutableSchema({ typeDefs: typedefs, resolvers: resolvers })
+    const protectedAuth = applyMiddleware(makeExecutable, auth)
+
+    const server = new ApolloServer({ 
+        schema: protectedAuth,
+        // resolvers: resolvers,
+        // typeDefs: typedefs,
+        plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
+        csrfPrevention: false,
+        formatError: (formattedError, error) => {
+            // Return a different error message
+            if (
+              formattedError.extensions.code ===
+              ApolloServerErrorCode.GRAPHQL_VALIDATION_FAILED
+            ) {
+              return {
+                ...formattedError,
+                message: "Your query doesn't match the schema. Try double-checking it!",
+              };
+            }
+            if (error) {
+                return {
+                    ...error
+                }
+            }
+        }
     })
+    
+    await server.start();
+
+    app.use(
+        bodyParser.json(),
+        expressMiddleware(server, {
+            context: async ({ req, res }) => {
+                return { token: req.headers.authorization }
+            }
+        }),
+    )
+    
+    await new Promise((resolve) => httpServer.listen({ port: process.env.PORT }, resolve));
+    console.log(`🚀 Server ready at http://localhost:${process.env.PORT}/`);
 }
 
 startServer();

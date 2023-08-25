@@ -1,10 +1,15 @@
-const { gql } = require('apollo-server-express');
+// const { gql } = require('@apollo/server');
 
-module.exports = gql`
+module.exports = `
     type File {
         filename: String!
         mimetype: String!
         encoding: String!
+    }
+
+    type LoginField {
+        token: String
+        users: User
     }
 
     input UserField {
@@ -39,5 +44,6 @@ module.exports = gql`
         AddUser(input: UserField): User
         AddProfile(input: ProfileField): Profile
         singleUpload(file: Upload!): File!
+        Login(first_name: String, password: String): LoginField
     }
 `

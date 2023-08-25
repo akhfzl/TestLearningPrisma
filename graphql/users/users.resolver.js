@@ -1,7 +1,9 @@
 const prisma = require('../../db/prisma');
 const finished = require("stream-promise");
 const { UploadToDropBox } = require('./users.utilities');
-require('dotenv').config()
+const { hash, compare } = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { GraphQLError } = require('graphql');
 
 const Users = async(parent, args, ctx) => {
     const data = await prisma.user.findMany();
@@ -9,35 +11,60 @@ const Users = async(parent, args, ctx) => {
 }
 
 const AddUser = async(parent, { input }, ctx) => {
+    const psw = await hash(input.password, 10);
     const adding = await prisma.user.create({
         data: {
             first_name: input.first_name,
             last_name: input.last_name,
-            password: input.password 
+            password: psw
         }
     })
 
     return adding
 }
 
-const AddProfile = async(parent, { input }, ctx) => {
-    // const adding = await prisma.profile.create({
-    //     data: {   
-    //         bio: input.bio,
-    //         userId: 1
-    //     }
-    // })
-    // console.log(adding)
-    const gets = await prisma.profile.findFirst({
+const Login = async(parent, { first_name, password }, ctx) => {
+    const users = await prisma.user.findFirst({
         where: {
-            userId: 2
+            first_name: first_name
         },
-        include: {
-            user:true
+    })
+    if (!users) {
+        throw new GraphQLError('User not found', { extensions: { code: 'NOT FOUND' } })
+    }
+
+    const is_password = await compare(password, users.password);
+    
+    if (!is_password) {
+        throw new GraphQLError('Password is incorrect', { extensions: { code: 'AUTHENTICATION' } })
+    }
+
+    const token = jwt.sign(
+        {
+            id: users.id,
+        },
+        process.env.SECRET_TOKEN,
+        {
+            expiresIn: '1d'
+        }
+    )
+
+    return {
+        token,
+        users
+    }
+}
+
+const AddProfile = async(parent, { input }, ctx) => {
+    console.log('res', ctx)
+    const profile_add = await prisma.profile.create({
+        data: {   
+            bio: input.bio,
+            userId: ctx.user.id
         }
     })
-    console.log(gets)
-    return gets
+
+    return profile_add
 }
 
 const singleUpload = async(parent, { file }, args) => {
@@ -59,6 +86,7 @@ module.exports = {
     Mutation: {
         AddUser,
         AddProfile,
-        singleUpload
+        singleUpload,
+        Login
     }
 }
