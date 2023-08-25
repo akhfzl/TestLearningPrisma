@@ -1,10 +1,10 @@
-const { gql } = require('apollo-server-express');
+// const { gql } = require('@apollo/server');
 const { merge } = require('lodash');
 const GraphQLUpload = require('graphql-upload-minimal');
-
+const auth = require('./auth');
 const users = require('./users');
 
-const typedef = gql`
+const typedef = `
     scalar Upload
     type Query 
     type Mutation
@@ -25,5 +25,6 @@ resolvers = merge(
 
 module.exports = {
     typedefs,
-    resolvers
+    resolvers,
+    auth
 };
